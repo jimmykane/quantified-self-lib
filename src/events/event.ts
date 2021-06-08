@@ -46,7 +46,6 @@ export class Event extends DurationClassAbstract implements EventInterface {
 
   getActivities(): ActivityInterface[] {
     this.sortActivities(); // PErhaps move on adding ? Lets check performance
-    // debugger
     return this.activities;
   }
 

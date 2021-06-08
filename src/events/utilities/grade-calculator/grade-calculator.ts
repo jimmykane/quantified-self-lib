@@ -48,17 +48,16 @@ export class GradeCalculator {
       altitudeStream = altitudeStream.map(v => (v === null ? null : kf.filter(v)));
     }
 
-    let gradeStream = basedOnAltitude ?
-      this.computeGradeStreamBasedOnAltitude(distanceStream, altitudeStream, lookAhead, lookAheadInTime)
+    let gradeStream = basedOnAltitude
+      ? this.computeGradeStreamBasedOnAltitude(distanceStream, altitudeStream, lookAhead, lookAheadInTime)
       : this.computeGradeStreamBasedOnDistance(distanceStream, altitudeStream, lookAhead, lookAheadInTime);
 
     if (filterGrade) {
       const kf = new KalmanFilter();
-      gradeStream = gradeStream.map(v => v === null ? null : kf.filter(v));
+      gradeStream = gradeStream.map(v => (v === null ? null : kf.filter(v)));
       gradeStream = new LowPassFilter(0.5).smoothArray(gradeStream);
     }
-    return gradeStream
-      .map(v => v === null ? null : Math.round(v * 10) / 10);
+    return gradeStream.map(v => (v === null ? null : Math.round(v * 10) / 10));
   }
 
   /**
