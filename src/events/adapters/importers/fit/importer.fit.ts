@@ -4,7 +4,7 @@ import { Lap } from '../../../../laps/lap';
 import { EventInterface } from '../../../event.interface';
 import { Creator } from '../../../../creators/creator';
 import { CreatorInterface } from '../../../../creators/creator.interface';
-import { ActivityTypes } from '../../../../activities/activity.types';
+import { ActivityTypes, ActivityTypesMoving } from '../../../../activities/activity.types';
 import { DataDuration } from '../../../../data/data.duration';
 import { DataEnergy } from '../../../../data/data.energy';
 import { ActivityInterface } from '../../../../activities/activity.interface';
@@ -12,7 +12,7 @@ import { LapInterface } from '../../../../laps/lap.interface';
 import { DataDistance } from '../../../../data/data.distance';
 import { ImporterFitGarminDeviceNames } from './importer.fit.garmin.device.names';
 import { ImporterFitSuuntoDeviceNames } from './importer.fit.suunto.device.names';
-import { ImporterZwiftDeviceNames } from './importer.fit.swift.device.names';
+import { ImporterZwiftDeviceNames } from './importer.fit.zwift.device.names';
 import { DataPause } from '../../../../data/data.pause';
 import { DataInterface } from '../../../../data/data.interface';
 import { DataCadenceAvg } from '../../../../data/data.cadence-avg';
@@ -70,7 +70,12 @@ import { EmptyEventLibError } from '../../../../errors/empty-event-sports-libs.e
 import { DataStartEvent } from '../../../../data/data.start-event';
 import { DataStopEvent } from '../../../../data/data.stop-event';
 import { DataStopAllEvent } from '../../../../data/data.stop-all-event';
+import { DataMovingTime } from '../../../../data/data.moving-time';
 import { ActivityUtilities } from '../../../utilities/activity.utilities';
+import { DataTimerTime } from '../../../../data/data.timer-time';
+import { DataTotalCycles } from '../../../../data/data-total.cycles';
+import { DataPoolLength } from '../../../../data/data.pool-length';
+import { DataActiveLengths } from '../../../../data/data-active.lengths';
 
 const FitFileParser = require('fit-file-parser').default;
 
@@ -87,7 +92,6 @@ export class EventImporterFIT {
       });
 
       fitFileParser.parse(arrayBuffer, (error: any, fitDataObject: any) => {
-        // debugger;
         // Iterate over the sessions and create their activities
         const activities: ActivityInterface[] = fitDataObject.sessions.map((sessionObject: any) => {
           // Get the activity from the sessionObject
@@ -370,29 +374,63 @@ export class EventImporterFIT {
   // @todo move this to a mapper
   private static getStatsFromObject(object: any, activity: ActivityInterface): DataInterface[] {
     const stats = [];
-    // @todo can also check the events ;-)
-    let totalTimerTime = 0;
-    if (isNumber(object.total_timer_time) && isNumber(object.total_elapsed_time)) {
-      totalTimerTime =
-        object.total_elapsed_time < object.total_timer_time ? object.total_elapsed_time : object.total_timer_time;
-    } else if (isNumber(object.total_timer_time)) {
-      totalTimerTime = object.total_elapsed_time;
+
+    // TOTAL ELAPSED TIME on Object (activity, lap...)
+    let elapsedTime = 0;
+    if (isNumber(object.total_elapsed_time)) {
+      elapsedTime = object.total_elapsed_time;
     } else if ((object.timestamp - object.start_time) / 1000) {
-      totalTimerTime = (object.timestamp - object.start_time) / 1000;
+      elapsedTime = (object.timestamp - object.start_time) / 1000;
     }
+
     // 0 should be not included aha it's not legit to have a 0 for total timer time
     // And that typically is a device error we should look at the samples
     // Since start and end date are inclusive for sample size eg at time [0] there can be a value
-    if (!totalTimerTime) {
-      totalTimerTime = ActivityUtilities.getDataLength(activity.startDate, activity.endDate) - 1;
+    if (!elapsedTime) {
+      elapsedTime = ActivityUtilities.getDataLength(activity.startDate, activity.endDate) - 1;
     }
-    stats.push(new DataDuration(totalTimerTime));
-    // Set the pause which is elapsed time - moving time (timer_time)
-    // There is although an exception for Zwift devices that have these fields vise versa
-    const pause =
-      (object.total_elapsed_time > totalTimerTime
-        ? object.total_elapsed_time - totalTimerTime
-        : totalTimerTime - object.total_elapsed_time) || 0;
+
+    stats.push(new DataDuration(Math.round(elapsedTime * 100) / 100));
+
+    // TOTAL TIMER TIME on Object (activity, lap...)
+    let timerTime = 0;
+    if (isNumber(object.total_timer_time)) {
+      timerTime = object.total_timer_time;
+    }
+
+    // If timer time is unknown then assign elapsedTime value
+    if (!timerTime) {
+      timerTime = elapsedTime;
+    }
+
+    stats.push(new DataTimerTime(Math.round(timerTime * 100) / 100));
+
+    // Moving TIME on Object (activity, lap...)
+    let movingTime = 0;
+    if (object.lengths && object.lengths.length > 0) {
+      object.lengths.forEach((lengthVal: any) => {
+        if (lengthVal.length_type === 'active') {
+          movingTime += lengthVal.total_timer_time;
+        }
+      });
+    } else if (object.records && object.records.length > 0) {
+      const speedThreshold = ActivityTypesMoving.getSpeedThreshold(activity.type);
+      object.records.forEach((record: any, index: number) => {
+        if ((record.speed || record.enhanced_speed) > speedThreshold) {
+          const previousRecordTime = object.records[index - 1]?.timestamp || object.start_time;
+          movingTime += (record.timestamp.getTime() - previousRecordTime.getTime()) / 1000;
+        }
+      });
+    }
+
+    // Append moving stat only if moving time has been detected
+    // We need that to compute total global moving time later
+    if (movingTime > 0) {
+      stats.push(new DataMovingTime(Math.round(movingTime * 100) / 100));
+    }
+
+    // Pause TIME on Object (activity, lap...)
+    const pause = elapsedTime > movingTime && movingTime > 0 ? Math.round((elapsedTime - movingTime) * 100) / 100 : 0;
     stats.push(new DataPause(pause));
 
     if (isNumberOrString(object.total_distance)) {
@@ -440,7 +478,7 @@ export class EventImporterFIT {
     if (isNumberOrString(object.max_speed)) {
       stats.push(new DataSpeedMax(object.max_speed));
     }
-    // Keep latest , encanched @todo this can create a bug
+    // Keep latest , enhanced @todo this can create a bug
     if (isNumberOrString(object.enhanced_avg_speed)) {
       stats.push(new DataSpeedAvg(object.enhanced_avg_speed));
     }
@@ -496,12 +534,28 @@ export class EventImporterFIT {
     if (isNumberOrString(object.avg_swolf)) {
       stats.push(new DataSWOLFAvg(object.avg_swolf));
     }
+
+    // Pool length
+    if (isNumberOrString(object.pool_length)) {
+      const poolLength = object.pool_length_unit.match(/metric/i) ? object.pool_length : object.pool_length * 0.9144; // Convert to meters from yards when not metric
+      stats.push(new DataPoolLength(poolLength));
+    }
+
+    // Active lengths
+    if (isNumberOrString(object.num_active_lengths)) {
+      stats.push(new DataActiveLengths(object.num_active_lengths));
+    }
+
+    // Total cycle
+    if (isNumberOrString(object.total_cycles)) {
+      stats.push(new DataTotalCycles(object.total_cycles));
+    }
+
     // Description
     if (isNumberOrString(object.description)) {
       stats.push(new DataDescription(object.description));
     }
 
-    // @todo add support for more data
     return stats;
   }
 
@@ -560,7 +614,6 @@ export class EventImporterFIT {
       }
     }
 
-    // debugger;
     if (fitDataObject.file_creator && isNumberOrString(fitDataObject.file_creator.hardware_version)) {
       creator.hwInfo = String(fitDataObject.file_creator.hardware_version);
     }
@@ -572,6 +625,12 @@ export class EventImporterFIT {
     if (fitDataObject.file_ids[0] && isNumberOrString(fitDataObject.file_ids[0].serial_number)) {
       creator.serialNumber = fitDataObject.file_ids[0].serial_number;
     }
+
+    // If creator name is a number ONLY (e.g. product number), then flag it as 'Unknown'
+    if (Number.isFinite(creator.name) || creator.name.match(/^\d+$/)) {
+      creator.name = `Unknown`;
+    }
+
     return creator;
   }
 }

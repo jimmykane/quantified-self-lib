@@ -1028,6 +1028,27 @@ export class ActivityTypesGroupMapping {
   };
 }
 
+export class ActivityTypesMoving {
+  /**
+   * Holds moving speed threshold in m/s per sport group
+   */
+  private static SPORTS_MOVING_SPEED_THRESHOLD_MAP = new Map<ActivityTypes, number>([
+    [ActivityTypes.Running, 2 / 3.6], // m/s
+    [ActivityTypes.Cycling, 7 / 3.6] // m/s
+  ]);
+
+  private static DEFAULT_MOVING_SPEED_THRESHOLD = 0.3; // m/s
+
+  /**
+   * Provides speed threshold by sport to compute moving time
+   * @param activityType
+   */
+  static getSpeedThreshold(activityType: ActivityTypes): number {
+    const threshold = this.SPORTS_MOVING_SPEED_THRESHOLD_MAP.get(activityType);
+    return threshold && Number.isFinite(threshold) ? threshold : this.DEFAULT_MOVING_SPEED_THRESHOLD;
+  }
+}
+
 export class StravaGPXTypes {
   public static readonly map: Map<number, ActivityTypes> = new Map<number, ActivityTypes>([
     [1, ActivityTypes.Cycling],

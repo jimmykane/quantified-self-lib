@@ -236,6 +236,10 @@ export class Activity extends DurationClassAbstract implements ActivityInterface
     return this.laps;
   }
 
+  hasLaps(): boolean {
+    return this.laps.length > 0;
+  }
+
   getAllEvents(): DataEvent[] {
     return this.events;
   }

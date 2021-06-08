@@ -177,6 +177,11 @@ export interface ActivityInterface
   addLap(lap: LapInterface): this;
 
   /**
+   * Gets the laps of the activity
+   */
+  hasLaps(): boolean;
+
+  /**
    * Gets all the timebased events of the activity
    */
   getAllEvents(): DataEvent[];

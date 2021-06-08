@@ -2,12 +2,21 @@ import { Activity } from '../../../../activities/activity';
 import { EventInterface } from '../../../event.interface';
 import { Creator } from '../../../../creators/creator';
 import { Event } from '../../../event';
-import { ActivityTypes, StravaGPXTypes } from '../../../../activities/activity.types';
+import { ActivityTypes, ActivityTypesMoving, StravaGPXTypes } from '../../../../activities/activity.types';
 import { ActivityInterface } from '../../../../activities/activity.interface';
 import { GPXSampleMapper } from './importer.gpx.mapper';
-import { isNumberOrString } from '../../../utilities/helpers';
+import { convertSpeedToPace, isNumberOrString } from '../../../utilities/helpers';
 import { EventUtilities } from '../../../utilities/event.utilities';
 import { GXParser } from './gx-parser';
+import { ActivityUtilities } from '../../../utilities/activity.utilities';
+import { DataSpeed } from '../../../../data/data.speed';
+import { StreamDataItem } from '../../../../streams/stream.interface';
+import { DataDuration } from '../../../../data/data.duration';
+import { DataTimerTime } from '../../../../data/data.timer-time';
+import { DataMovingTime } from '../../../../data/data.moving-time';
+import { DataSpeedAvg } from '../../../../data/data.speed-avg';
+import { DataDistance } from '../../../../data/data.distance';
+import { DataPaceAvg } from '../../../../data/data.pace-avg';
 
 export class EventImporterGPX {
   static getFromString(gpx: string, domParser?: Function, name = 'New Event'): Promise<EventInterface> {
@@ -40,11 +49,9 @@ export class EventImporterGPX {
           });
         }
 
-        // debugger;
-
         // Create an activity. Set the dates depending on route etc
         const startDate = new Date(isActivity ? samples[0].time[0] : new Date());
-        // @todo for routes add a seperate parser
+        // @todo for routes add a separate parser
         const endDate = isActivity
           ? new Date(samples[samples.length - 1].time[0])
           : new Date(startDate.getTime() + samples.length * 1000);
@@ -83,8 +90,48 @@ export class EventImporterGPX {
             });
           }
         });
-        // debugger;
+
+        // Force creation of missing streams earlier to compute moving time from speed stream
+        ActivityUtilities.generateMissingStreamsForActivity(activity);
+
+        // Compute moving time, timer time and elapsed time
+        let movingTime = 0;
+        const speedThreshold = ActivityTypesMoving.getSpeedThreshold(activityType);
+        const elapsedTime = (activity.endDate.getTime() - activity.startDate.getTime()) / 1000;
+        const timerTime = elapsedTime;
+
+        if (activity.hasStreamData(DataSpeed.type)) {
+          const streamDataByDuration = activity.getStreamDataByDuration(DataSpeed.type, true, true);
+
+          streamDataByDuration.forEach((item: StreamDataItem, index: number) => {
+            if (index === 0) {
+              return;
+            }
+
+            if (<number>item.value > speedThreshold) {
+              movingTime += (item.time - streamDataByDuration[index - 1].time) / 1000;
+            }
+          });
+        }
+
+        // Apply stats
+        activity.addStat(new DataDuration(elapsedTime));
+        activity.addStat(new DataTimerTime(timerTime));
+        activity.addStat(new DataMovingTime(movingTime));
+
+        // Now calculating avg speed/pace from moving time => This is how garmin & strava compute them from GPX file.
+        if (activity.hasStreamData(DataDistance.type)) {
+          const distanceStream = activity.getSquashedStreamData(DataDistance.type);
+          const distance = distanceStream[distanceStream.length - 1];
+          if (distance > 0 && movingTime > 0) {
+            const avgSpeed = distance / movingTime;
+            activity.addStat(new DataSpeedAvg(avgSpeed));
+            activity.addStat(new DataPaceAvg(convertSpeedToPace(avgSpeed)));
+          }
+        }
+
         activities.push(activity);
+
         return activities;
       }, []);
 
@@ -92,7 +139,7 @@ export class EventImporterGPX {
       activities.forEach(activity => {
         event.addActivity(activity);
       });
-      // debugger;
+
       // generate global stats
       EventUtilities.generateStatsForAll(event);
       resolve(event);

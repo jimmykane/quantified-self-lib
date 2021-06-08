@@ -192,33 +192,77 @@ import {
 } from '../../data/data.grade-adjusted-pace-min';
 import { DataGrade } from '../../data/data.grade';
 import { GradeCalculator } from './grade-calculator/grade-calculator';
-import { ActivityTypeGroups, ActivityTypes, ActivityTypesHelper } from '../../activities/activity.types';
+import {
+  ActivityTypeGroups,
+  ActivityTypes,
+  ActivityTypesHelper,
+  ActivityTypesMoving
+} from '../../activities/activity.types';
 import { DataMovingTime } from '../../data/data.moving-time';
 import { StatsClassInterface } from '../../stats/stats.class.interface';
+import { DataTimerTime } from '../../data/data.timer-time';
+import { DataNumber } from '../../data/data.number';
 
 export class ActivityUtilities {
   private static geoLibAdapter = new GeoLibAdapter();
 
+  /**
+   * Provide average from laps a given stat type
+   */
+  public static getDataTypeAvgFromLaps(
+    activity: ActivityInterface,
+    statType: string,
+    filterOver?: number
+  ): number | null {
+    const data = <number[]>activity
+      .getLaps()
+      .map(lap => (<DataNumber>lap.getStat(statType))?.getValue())
+      .filter(d => Number.isFinite(d) && (Number.isFinite(filterOver) ? d > <number>filterOver : true));
+
+    if (data.length > 0) {
+      return this.getAverage(data);
+    }
+
+    return null;
+  }
+
+  /**
+   * Provide average of a given stream type
+   */
   public static getDataTypeAvg(
     activity: ActivityInterface,
     streamType: string,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    filterOver?: number
   ): number {
     const data = <number[]>(
       activity
         .getSquashedStreamData(streamType, startDate, endDate)
-        .filter(streamData => streamData !== Infinity && streamData !== -Infinity)
+        .filter(
+          streamData =>
+            streamData !== Infinity &&
+            streamData !== -Infinity &&
+            (Number.isFinite(filterOver) ? streamData > <number>filterOver : true)
+        )
     );
     return this.getAverage(data);
   }
 
+  public static round(value: number, decimals = 0) {
+    const decimalsFactor = Math.pow(10, decimals);
+    return Math.round(value * decimalsFactor) / decimalsFactor;
+  }
+
   public static getAverage(data: number[]): number {
-    const sum = data.reduce((sumbuff: number, value: number) => {
+    return this.getSum(data) / data.length;
+  }
+
+  public static getSum(data: number[]): number {
+    return data.reduce((sumbuff: number, value: number) => {
       sumbuff += value;
       return sumbuff;
     }, 0);
-    return sum / data.length;
   }
 
   public static getDataTypeMax(
@@ -234,9 +278,10 @@ export class ActivityUtilities {
     activity: ActivityInterface,
     streamType: string,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    filterOver?: number
   ): number {
-    return this.getActivityDataTypeMinOrMax(activity, streamType, false, startDate, endDate);
+    return this.getActivityDataTypeMinOrMax(activity, streamType, false, startDate, endDate, filterOver);
   }
 
   public static getDataTypeMinToMaxDifference(
@@ -727,13 +772,13 @@ export class ActivityUtilities {
   }
 
   public static getMax(data: number[]): number {
-    return data.reduce(function (previousValue, currentValue) {
+    return data.reduce(function(previousValue, currentValue) {
       return Math.max(previousValue, currentValue);
     }, -Infinity);
   }
 
   public static getMin(data: number[]): number {
-    return data.reduce(function (previousValue, currentValue) {
+    return data.reduce(function(previousValue, currentValue) {
       return Math.min(previousValue, currentValue);
     }, Infinity);
   }
@@ -893,7 +938,7 @@ export class ActivityUtilities {
    * This will always create a steam even if the distance is 0
    * @param activity
    */
-  private static generateMissingStreamsForActivity(activity: ActivityInterface): ActivityInterface {
+  public static generateMissingStreamsForActivity(activity: ActivityInterface): ActivityInterface {
     // First add any missing data to the streams via interpolating and extrapolating
     this.addMissingDataToStreams(activity);
     if (
@@ -906,23 +951,16 @@ export class ActivityUtilities {
       streamData[0] = distance; // Force first distance sample to be equal to 0 instead of null
       activity
         .getPositionData()
-        .reduce(
-          (
-            prevPosition: DataPositionInterface | null,
-            position: DataPositionInterface | null,
-            index: number,
-            array
-          ) => {
-            if (!position) {
-              return prevPosition;
-            }
-            if (prevPosition && position) {
-              distance += Number(this.geoLibAdapter.getDistance([prevPosition, position]).toFixed(1));
-            }
-            streamData[index] = distance;
-            return position;
+        .reduce((prevPosition: DataPositionInterface | null, position: DataPositionInterface | null, index: number) => {
+          if (!position) {
+            return prevPosition;
           }
-        );
+          if (prevPosition && position) {
+            distance += this.round(this.geoLibAdapter.getDistance([prevPosition, position]), 2);
+          }
+          streamData[index] = distance;
+          return position;
+        });
 
       if (!activity.hasStreamData(DataDistance.type)) {
         activity.addStream(new Stream(DataDistance.type, streamData));
@@ -934,18 +972,26 @@ export class ActivityUtilities {
 
       if (!activity.hasStreamData(DataSpeed.type)) {
         const speedStreamData = activity.createStream(DataSpeed.type).getData();
-        activity.getStreamDataByDuration(DataDistance.type).forEach((distanceData: StreamDataItem, index: number) => {
-          if (distanceData.value === 0) {
-            speedStreamData[index] = 0;
-            return;
+        const distanceStream = activity.getStreamDataByDuration(DataDistance.type);
+        let previousDistanceItem: StreamDataItem;
+        distanceStream.forEach((distanceItem: StreamDataItem, index: number) => {
+          // Use the first distance item value if previous distance is unknown
+          if (!previousDistanceItem) {
+            previousDistanceItem = distanceItem;
           }
 
-          if (distanceData.value !== null && isFinite(distanceData.time) && distanceData.time > 0) {
-            speedStreamData[index] = Math.round((distanceData.value / (distanceData.time / 1000)) * 100) / 100;
-            return;
-          }
+          // If know distance then compute speed from last known distance item
+          if (Number.isFinite(distanceItem.value)) {
+            const deltaTime = (distanceItem.time - previousDistanceItem.time) / 1000;
+            const deltaDistance = distanceItem?.value ? distanceItem.value - (previousDistanceItem?.value || 0) : 0;
 
-          speedStreamData[index] = null;
+            speedStreamData[index] = this.round(deltaTime > 0 ? deltaDistance / deltaTime : 0, 3);
+
+            // Keep tracking of last know distance item
+            previousDistanceItem = distanceItem;
+          } else {
+            speedStreamData[index] = null;
+          }
         });
         activity.addStream(new Stream(DataSpeed.type, speedStreamData));
       }
@@ -974,9 +1020,7 @@ export class ActivityUtilities {
       const speedStreamData = activity.getStreamData(DataSpeed.type);
       const gradeStreamData = activity.getStreamData(DataGrade.type);
       const gradeAdjustedSpeedData = speedStreamData.map((value, index) =>
-        value === null
-          ? null
-          : Math.round(GradeCalculator.estimateAdjustedSpeed(value, gradeStreamData[index] || 0) * 100) / 100
+        value === null ? null : this.round(GradeCalculator.estimateAdjustedSpeed(value, gradeStreamData[index] || 0), 2)
       );
       activity.addStream(new Stream(DataGradeAdjustedSpeed.type, gradeAdjustedSpeedData));
     }
@@ -1123,11 +1167,17 @@ export class ActivityUtilities {
     streamType: string,
     max: boolean,
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
+    filterOver?: number
   ): number {
     const data = activity
       .getSquashedStreamData(streamType, startDate, endDate)
-      .filter(streamData => streamData !== Infinity && streamData !== -Infinity);
+      .filter(
+        streamData =>
+          streamData !== Infinity &&
+          streamData !== -Infinity &&
+          (Number.isFinite(filterOver) ? streamData > <number>filterOver : true)
+      );
     if (max) {
       return this.getMax(data);
     }
@@ -1160,8 +1210,8 @@ export class ActivityUtilities {
       activity.addStat(
         new DataGNSSDistance(
           activity.getSquashedStreamData(DataGNSSDistance.type)[
-            activity.getSquashedStreamData(DataGNSSDistance.type).length - 1
-          ]
+          activity.getSquashedStreamData(DataGNSSDistance.type).length - 1
+            ]
         )
       );
     }
@@ -1207,7 +1257,7 @@ export class ActivityUtilities {
     }
     // Heart Rate Avg
     if (!activity.getStat(DataHeartRateAvg.type) && activity.hasStreamData(DataHeartRate.type)) {
-      activity.addStat(new DataHeartRateAvg(this.getDataTypeAvg(activity, DataHeartRate.type)));
+      activity.addStat(new DataHeartRateAvg(this.round(this.getDataTypeAvg(activity, DataHeartRate.type))));
     }
     // Cadence Max
     if (!activity.getStat(DataCadenceMax.type) && activity.hasStreamData(DataCadence.type)) {
@@ -1215,11 +1265,18 @@ export class ActivityUtilities {
     }
     // Cadence Min
     if (!activity.getStat(DataCadenceMin.type) && activity.hasStreamData(DataCadence.type)) {
-      activity.addStat(new DataCadenceMin(this.getDataTypeMin(activity, DataCadence.type)));
+      // Get min cadence except 0. A 0 cadence is not meaningful.
+      const minCadenceOver = 0;
+      activity.addStat(
+        new DataCadenceMin(this.getDataTypeMin(activity, DataCadence.type, undefined, undefined, minCadenceOver))
+      );
     }
     // Cadence Avg
     if (!activity.getStat(DataCadenceAvg.type) && activity.hasStreamData(DataCadence.type)) {
-      activity.addStat(new DataCadenceAvg(this.getDataTypeAvg(activity, DataCadence.type)));
+      // Get avg cadence except 0 values. Platforms like garmin/strava don't include 0 cadences in their averages.
+      const avgCadenceOver = 0;
+      const avgCadence = this.getDataTypeAvg(activity, DataCadence.type, undefined, undefined, avgCadenceOver);
+      activity.addStat(new DataCadenceAvg(this.round(avgCadence)));
     }
 
     // Speed Max
@@ -1944,47 +2001,61 @@ export class ActivityUtilities {
       activity.addStat(new DataDuration((activity.endDate.getTime() - activity.startDate.getTime()) / 1000));
     }
 
-    if (activity.hasStreamData(DataSpeed.type)) {
-      const hasGradeAdjustedSpeedStream = activity.hasStreamData(DataGradeAdjustedSpeed.type);
+    // If timer time not set, then assign elapsed time by default (e.g. GPX file dont support timer time)
+    if (!activity.getStat(DataTimerTime.type)) {
+      activity.addStat(new DataTimerTime(this.round(activity.getDuration().getValue(), 2)));
+    }
 
-      const finalSpeedStreamData = hasGradeAdjustedSpeedStream
-        ? activity.getSquashedStreamData(DataGradeAdjustedSpeed.type)
-        : activity.getSquashedStreamData(DataSpeed.type);
+    // If missing moving time
+    // Or moving time equals duration, then try to build real moving from laps if available
+    if (!activity.getStat(DataMovingTime.type)) {
+      let movingTime = 0;
 
-      let speedThreshold: number;
-
-      if (ActivityTypesHelper.getActivityGroupForActivityType(activity.type) === ActivityTypeGroups.Cycling) {
-        speedThreshold = hasGradeAdjustedSpeedStream ? 2.6 : 2.15; // @todo final static + tweak => For @thomaschampagne
-      } else if (ActivityTypesHelper.getActivityGroupForActivityType(activity.type) === ActivityTypeGroups.Running) {
-        // speedThreshold = hasGradeAdjustedSpeedStream ? 1.75 : 1.20; // @todo final static + tweak => For @thomaschampagne
-        speedThreshold = hasGradeAdjustedSpeedStream ? 1.7 : 1.15; // @todo final static + tweak => For @thomaschampagne
-      } else {
-        speedThreshold = 0;
+      // First try to compute moving time from laps
+      const laps = activity.getLaps();
+      if (laps && laps.length > 0) {
+        activity.getLaps().forEach(lap => {
+          const stat = <DataMovingTime>lap.getStat(DataMovingTime.type);
+          if (stat) {
+            movingTime += stat.getValue();
+          }
+        });
       }
 
-      // Set the moving time to the actual duration
-      let movingTime = activity.getDuration().getValue();
+      // Get timer time...
+      const timerTime = (<DataTimerTime>activity.getStat(DataTimerTime.type))?.getValue();
 
-      // Remove anything that doesn't fit the criteria by removing 1s that it represents on the speed stream
-      finalSpeedStreamData.forEach((speedValue, index) => {
-        if (index === 0) {
-          return;
-        }
-        if (<number>speedValue <= speedThreshold) {
-          movingTime -= 1;
-        }
-      });
+      // ... and compare with moving time and determine moving time validity
+      const lapsMovingTimeValid = movingTime > 0 && movingTime <= timerTime;
+
+      // If moving time from laps is not valid
+      if (!lapsMovingTimeValid) {
+        // ...then re-compute moving time but using global records.
+        movingTime = 0;
+        const speedByDurationStream = activity.getStreamDataByDuration(DataSpeed.type, true, true);
+
+        const speedThreshold = ActivityTypesMoving.getSpeedThreshold(activity.type);
+        speedByDurationStream.forEach((speedItem: StreamDataItem, index: number) => {
+          if (speedItem.value !== null && speedItem.value > speedThreshold) {
+            movingTime += (speedByDurationStream[index].time - (speedByDurationStream[index - 1]?.time || 0)) / 1000;
+          }
+        });
+      }
+
+      // In case moving time would be invalid, set it to timer time "at max"
+      if (!movingTime || movingTime > timerTime) {
+        movingTime = timerTime;
+      }
 
       activity.addStat(new DataMovingTime(movingTime));
     }
 
-    // If there is no pause define that from the start date and end date and duration
-    if (!activity.getStat(DataPause.type)) {
-      activity.addStat(
-        new DataPause(
-          (activity.endDate.getTime() - activity.startDate.getTime()) / 1000 - activity.getDuration().getValue()
-        )
-      );
+    // If there is no pause defined then get it from duration and moving time (if available)
+    if (!activity.getStat(DataPause.type) || !(<DataPause>activity.getStat(DataPause.type)).getValue()) {
+      const movingTimeStat = <DataMovingTime>activity.getStat(DataMovingTime.type);
+      const pauseTime =
+        movingTimeStat && movingTimeStat.getValue() ? activity.getDuration().getValue() - movingTimeStat.getValue() : 0;
+      activity.addStat(new DataPause(this.round(pauseTime, 2)));
     }
   }
 }
