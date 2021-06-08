@@ -72,25 +72,6 @@
     "typescript": "^4.2.4",
     "xmldom": "^0.6.0"
   },
-  "jest": {
-    "transform": {
-      "^.+\\.tsx?$": "ts-jest"
-    },
-    "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
-    "moduleFileExtensions": [
-      "ts",
-      "tsx",
-      "js",
-      "jsx",
-      "json",
-      "node"
-    ],
-    "globals": {
-      "ts-jest": {
-        "babelConfig": true
-      }
-    }
-  },
   "husky": {
     "hooks": {
       "pre-commit": "pretty-quick --staged"
