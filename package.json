@@ -24,8 +24,9 @@
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
-    "watch": "tsc --watch",
-    "build": "tsc",
+    "build": "npm run clean && tsc --project tsconfig.lib.json",
+    "watch": "npm run build -- --watch",
+    "clean": "rimraf ./lib/",
     "generate:docs": "npm run build && typedoc --out docs --target es6 --theme minimal --mode file src",
     "lint:fix": "eslint . --ext ts --fix",
     "test": "jest",
@@ -68,7 +69,8 @@
     "ts-jest": "^26.3.0",
     "typedoc": "^0.18.0",
     "typescript": "^4.2.4",
-    "xmldom": "^0.3.0"
+    "xmldom": "^0.3.0",
+    "rimraf": "^3.0.2"
   },
   "jest": {
     "transform": {
