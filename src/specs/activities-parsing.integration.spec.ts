@@ -30,13 +30,11 @@ import { DataActiveLengths } from '../data/data-active.lengths';
 import { DataPaceAvg } from '../data/data.pace-avg';
 import { DataTemperatureAvg } from '../data/data.temperature-avg';
 import { DataMovingTime } from '../data/data.moving-time';
+import xmldom from 'xmldom';
 
 describe('FIT/TCX/GPX activity parsing compliance', () => {
-  let domParser: DOMParser;
 
-  beforeEach(() => {
-    domParser = new DOMParser();
-  });
+  const domParser = new xmldom.DOMParser();
 
   describe('Swimming', () => {
     describe('FIT', () => {
@@ -285,7 +283,7 @@ describe('FIT/TCX/GPX activity parsing compliance', () => {
         const gpxString = fs.readFileSync(path).toString();
 
         // When
-        const eventInterfacePromise = SportsLib.importFromGPX(gpxString);
+        const eventInterfacePromise = SportsLib.importFromGPX(gpxString, xmldom.DOMParser);
 
         // Then
         eventInterfacePromise.then((event: EventInterface) => {
@@ -330,7 +328,7 @@ describe('FIT/TCX/GPX activity parsing compliance', () => {
         const gpxString = fs.readFileSync(path).toString();
 
         // When
-        const eventInterfacePromise = SportsLib.importFromGPX(gpxString);
+        const eventInterfacePromise = SportsLib.importFromGPX(gpxString, xmldom.DOMParser);
 
         // Then
         eventInterfacePromise.then((event: EventInterface) => {
@@ -849,7 +847,7 @@ describe('FIT/TCX/GPX activity parsing compliance', () => {
         const gpxString = fs.readFileSync(path).toString();
 
         // When
-        const eventInterfacePromise = SportsLib.importFromGPX(gpxString);
+        const eventInterfacePromise = SportsLib.importFromGPX(gpxString, xmldom.DOMParser);
 
         // Then
         eventInterfacePromise.then((event: EventInterface) => {
@@ -884,7 +882,7 @@ describe('FIT/TCX/GPX activity parsing compliance', () => {
         const gpxString = fs.readFileSync(path).toString();
 
         // When
-        const eventInterfacePromise = SportsLib.importFromGPX(gpxString);
+        const eventInterfacePromise = SportsLib.importFromGPX(gpxString, xmldom.DOMParser);
 
         // Then
         eventInterfacePromise.then((event: EventInterface) => {
@@ -917,7 +915,7 @@ describe('FIT/TCX/GPX activity parsing compliance', () => {
         const gpxString = fs.readFileSync(path).toString();
 
         // When
-        const eventInterfacePromise = SportsLib.importFromGPX(gpxString);
+        const eventInterfacePromise = SportsLib.importFromGPX(gpxString, xmldom.DOMParser);
 
         // Then
         eventInterfacePromise.then((event: EventInterface) => {
@@ -954,7 +952,7 @@ describe('FIT/TCX/GPX activity parsing compliance', () => {
         const gpxString = fs.readFileSync(path).toString();
 
         // When
-        const eventInterfacePromise = SportsLib.importFromGPX(gpxString);
+        const eventInterfacePromise = SportsLib.importFromGPX(gpxString, xmldom.DOMParser);
 
         // Then
         eventInterfacePromise.then((event: EventInterface) => {
@@ -1321,7 +1319,7 @@ describe('FIT/TCX/GPX activity parsing compliance', () => {
         const gpxString = fs.readFileSync(path).toString();
 
         // When
-        const eventInterfacePromise = SportsLib.importFromGPX(gpxString);
+        const eventInterfacePromise = SportsLib.importFromGPX(gpxString, xmldom.DOMParser);
 
         // Then
         eventInterfacePromise.then((event: EventInterface) => {
@@ -1358,7 +1356,7 @@ describe('FIT/TCX/GPX activity parsing compliance', () => {
         const gpxString = fs.readFileSync(path).toString();
 
         // When
-        const eventInterfacePromise = SportsLib.importFromGPX(gpxString);
+        const eventInterfacePromise = SportsLib.importFromGPX(gpxString, xmldom.DOMParser);
 
         // Then
         eventInterfacePromise.then((event: EventInterface) => {
@@ -1394,7 +1392,7 @@ describe('FIT/TCX/GPX activity parsing compliance', () => {
         const gpxString = fs.readFileSync(path).toString();
 
         // When
-        const eventInterfacePromise = SportsLib.importFromGPX(gpxString);
+        const eventInterfacePromise = SportsLib.importFromGPX(gpxString, xmldom.DOMParser);
 
         // Then
         eventInterfacePromise.then((event: EventInterface) => {
@@ -1430,7 +1428,7 @@ describe('FIT/TCX/GPX activity parsing compliance', () => {
         const gpxString = fs.readFileSync(path).toString();
 
         // When
-        const eventInterfacePromise = SportsLib.importFromGPX(gpxString);
+        const eventInterfacePromise = SportsLib.importFromGPX(gpxString, xmldom.DOMParser);
 
         // Then
         eventInterfacePromise.then((event: EventInterface) => {

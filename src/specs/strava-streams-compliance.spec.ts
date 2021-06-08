@@ -16,6 +16,7 @@ import { DataTemperature } from '../data/data.temperature';
 import { DataPower } from '../data/data.power';
 import { DataDistance } from '../data/data.distance';
 import { DataGrade } from '../data/data.grade';
+import xmldom from 'xmldom';
 
 export const GRADE_TOLERANCE = 1.5;
 
@@ -24,6 +25,8 @@ function clone(obj: any) {
 }
 
 describe('Strava stream compliance', () => {
+  const domParser = new xmldom.DOMParser();
+
   const averageDeltaBetweenStreams = (actualStream: number[], expectedStream: number[]) => {
     let deltaSum = 0;
     actualStream.forEach((value, index) => {
@@ -898,7 +901,7 @@ describe('Strava stream compliance', () => {
     describe('Tcx file version', () => {
       // Given FIT Source: https://connect.garmin.com/modern/activity/828989227 OR https://www.strava.com/activities/343080886
       const path = __dirname + '/fixtures/rides/tcx/828989227.tcx';
-      const doc = new DOMParser().parseFromString(fs.readFileSync(path).toString(), 'application/xml');
+      const doc = domParser.parseFromString(fs.readFileSync(path).toString(), 'application/xml');
 
       it(`should match time`, done => {
         // Given
@@ -1047,7 +1050,7 @@ describe('Strava stream compliance', () => {
         const stravaTimeStream = clone(strava_3171438371_gpx.time);
 
         // When
-        const eventInterfacePromise = SportsLib.importFromGPX(gpxString);
+        const eventInterfacePromise = SportsLib.importFromGPX(gpxString, xmldom.DOMParser);
 
         // Then
         eventInterfacePromise.then((event: EventInterface) => {
@@ -1121,7 +1124,7 @@ describe('Strava stream compliance', () => {
         const stravaDistanceStream = clone(strava_3171438371_gpx.distance);
 
         // When
-        const eventInterfacePromise = SportsLib.importFromGPX(gpxString);
+        const eventInterfacePromise = SportsLib.importFromGPX(gpxString, xmldom.DOMParser);
 
         // Then
         eventInterfacePromise.then((event: EventInterface) => {
@@ -1143,7 +1146,7 @@ describe('Strava stream compliance', () => {
         const stravaGradeStream = clone(strava_3171438371_gpx.grade_smooth);
 
         // When
-        const eventInterfacePromise = SportsLib.importFromGPX(gpxString);
+        const eventInterfacePromise = SportsLib.importFromGPX(gpxString, xmldom.DOMParser);
 
         // Then
         eventInterfacePromise.then((event: EventInterface) => {

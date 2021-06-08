@@ -1,4 +1,5 @@
 import { EventImporterGPX } from './importer.gpx';
+import xmldom from 'xmldom';
 
 describe('importer.gpx', () => {
   it('parses gpx without name', async () => {
@@ -19,7 +20,7 @@ describe('importer.gpx', () => {
           </trk>
         </gpx> `;
 
-    const result = await EventImporterGPX.getFromString(gpxString);
+    const result = await EventImporterGPX.getFromString(gpxString, xmldom.DOMParser);
     expect(result.getFirstActivity().name).toEqual('');
   });
 
@@ -42,7 +43,7 @@ describe('importer.gpx', () => {
           </trk>
         </gpx> `;
 
-    const result = await EventImporterGPX.getFromString(gpxString);
+    const result = await EventImporterGPX.getFromString(gpxString, xmldom.DOMParser);
     expect(result.getFirstActivity().name).toEqual('Meylan Road Cycling');
   });
 });

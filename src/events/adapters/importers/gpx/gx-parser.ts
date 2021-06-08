@@ -11,8 +11,8 @@ export class GXParser {
     const attrs: any = {};
     const attributes: any[] = elm.attributes;
 
-    for (const attribute of attributes) {
-      const attr: any = attribute;
+    for (let i = 0; i < attributes.length; i++) {
+      const attr: any = attributes[i];
       if (attr && attr.value) {
         attrs[attr.name] = attr.value;
       }
